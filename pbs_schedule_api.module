@@ -1,0 +1,122 @@
+<?php
+
+/**
+ * @file pbs_schedule_api.module
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function pbs_schedule_api_permission() {
+  $permissions = array();
+
+  $permissions['administer pbs_schedule_api'] = array(
+    'title' => t('Administer PBS Schedule API'),
+    'description' => t('Add and update PBS Schedule key and settings.'),
+  );
+  return $permissions;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function pbs_schedule_api_menu() {
+  $items = array();
+
+  $items['admin/config/media/pbs_schedule_api'] = array(
+    'title' => 'PBS TV Schedule API Settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('pbs_schedule_api_settings_form'),
+    'access arguments' => array('administer pbs_schedule_api'),
+    'file' => 'pbs_schedule_api.admin.inc',  );
+  $items['admin/config/media/pbs_schedule_api/test'] = array(
+    'title' => 'PBS TV Schedules API Test Page',
+    'description' => 'Test the results from PBS TV Schedules API',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('pbs_schedule_api_admin_tests'),
+    'access arguments' => array('administer pbs_schedule_api'),
+    'file' => 'pbs_schedule_api.admin.inc',
+  );
+  return $items;
+}
+
+/*
+ * Basic API call
+ * @method = the method being called
+ * @params = a string containing the parameter
+ */
+function pbs_schedule_api_call($method, $params = NULL, $api_key = NULL, $callsign = NULL) {
+
+    $baseurl = 'http://services.pbs.org/tvss/';
+
+    // get api key and callsign
+    $config = pbs_schedule_api_get_config();
+    $api_key = (empty($api_key)) ? $config['api_key'] : $api_key;
+    $callsign = (empty($callsign)) ? $config['callsign'] : $callsign;
+    $timeout = $config['timeout'];
+
+    // callsign should be all lower case
+    $callsign = strtolower($callsign);
+
+    $header = 'X-PBSAUTH: ' . $api_key;
+
+    $opts = array(
+      'http' => array(
+        'method' => 'GET',
+        'headers' => array($header),
+        'timeout' =>$timeout,
+      )
+    );
+    // construct the API request
+    $url = $baseurl . $callsign . '/' . $method . '/';
+    if(!empty($params)) {
+      $url .= $params . '/';
+    }
+
+    // query the API
+    $results = drupal_http_request($url, $opts);
+
+    dpm($results);
+
+    if($results->code > 400 ) {
+      drupal_set_message(t('PBS Schedule API unable to connect response code: @code', array('@code'=>$results->code)), 'error', FALSE);
+      return null;
+    }
+    // decode JSON
+    if (!empty($results)) {
+      $scheduledata = drupal_json_decode($results->data);
+
+      // if there's an issue, display the error
+      // otherwise return the results
+      if (is_null($scheduledata)) {
+        drupal_set_message(t('PBS Schedule API was unable to decode response.'), 'warning', TRUE);
+        return NULL;
+      }
+      else {
+        return $scheduledata;
+      }
+    }
+    else {
+      return NULL;
+    }
+}
+
+/**
+ * Gets configuration settings.
+ *
+ * @return array
+ *   Associative array of config settings (api_key, callsign, timeout).
+ */
+function pbs_schedule_api_get_config() {
+  $config = &drupal_static(__FUNCTION__);
+
+  if (!isset($config)) {
+    $config = array(
+      'api_key' => variable_get('pbs_schedule_api_key'),
+      'callsign' => variable_get('pbs_schedule_api_callsign'),
+      'timeout' => variable_get('pbs_schedule_api_timeout'),
+    );
+  }
+
+  return $config;
+}

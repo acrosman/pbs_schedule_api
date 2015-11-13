@@ -1,0 +1,6 @@
+name = PBS Schedule API
+description = An API only module for interacting with the PBS Schedule API
+
+configure = admin/config/pbs_schedule_api
+package = Media
+core = 7.x
